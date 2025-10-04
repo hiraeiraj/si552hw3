@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Crossword Puzzle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font for a clean look */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Playfair+Display:wght@700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .crossword-container {
+            max-width: 1000px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        @media (min-width: 768px) {
+            .crossword-container {
+                flex-direction: row;
+            }
+        }
+
+        .clues-panel {
+            flex: 1;
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .grid-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .crossword-grid {
+            border-collapse: collapse;
+            user-select: none;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            overflow: hidden; /* Ensures shadows look good */
+        }
+
+        .grid-cell {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #9ca3af; /* Light gray border */
+            position: relative;
+            background-color: white;
+        }
+
+        .grid-cell.blocked {
+            background-color: #374151; /* Dark gray for blocked cells */
+            border: none;
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        .grid-cell input {
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            border: none;
+            outline: none;
+            padding: 0;
+            background: transparent;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .clue-number {
+            position: absolute;
+            top: 1px;
+            left: 3px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .grid-cell.highlight {
+            background-color: #d1fae5; /* Tailwind green-100 */
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .control-button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 700;
+            transition: all 0.2s;
+            cursor: pointer;
+            box-shadow: 0 4px #10b981; /* Green shadow */
+            position: relative;
+            top: 0;
+        }
+
+        .control-button:active {
+            top: 2px;
+            box-shadow: 0 2px #10b981;
+        }
+
+        #check-button {
+            background-color: #34d399; /* Tailwind green-400 */
+            color: white;
+        }
+
+        #reveal-button {
+            background-color: #9ca3af; /* Tailwind gray-400 */
+            color: white;
+            box-shadow: 0 4px #6b7280; /* Gray shadow */
+        }
+
+        #reveal-button:active {
+            top: 2px;
+            box-shadow: 0 2px #6b7280;
+        }
+
+        /* Message Box Styling */
+        #message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #fef3c7; /* Tailwind yellow-100 */
+            color: #92400e; /* Tailwind yellow-800 */
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            font-weight: 700;
+            z-index: 100;
+            text-align: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+            max-width: 90vw;
+        }
+        #message-box.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        /* Visually hidden style for the ARIA Live Region */
+        #aria-announcer {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            padding: 0;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="crossword-container">
+        
+        <!-- Grid Panel -->
+        <div class="grid-panel bg-white p-6 rounded-xl shadow-lg">
+            <h1 class="text-3xl font-bold mb-4 text-gray-800 font-[Playfair_Display]">Today's Crossword</h1>
+            <table id="crossword-grid" class="crossword-grid" role="grid" aria-label="Crossword Puzzle Grid">
+                <!-- Grid will be populated by JavaScript -->
+            </table>
+            <div class="button-group">
+                <button id="check-button" class="control-button" onclick="checkPuzzle()">Check Puzzle</button>
+                <button id="reveal-button" class="control-button" onclick="revealPuzzle()">Reveal Solution</button>
+            </div>
+        </div>
+
+        <!-- Clues Panel -->
+        <div class="clues-panel">
+            <div class="md:flex md:space-x-8 space-y-8 md:space-y-0">
+                <div id="across-clues" class="flex-1">
+                    <h2 class="text-2xl font-bold mb-4 border-b-2 pb-2 border-green-300 text-gray-700">Across</h2>
+                    <!-- Across clues will be populated here -->
+                </div>
+                <div id="down-clues" class="flex-1">
+                    <h2 class="text-2xl font-bold mb-4 border-b-2 pb-2 border-green-300 text-gray-700">Down</h2>
+                    <!-- Down clues will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Custom Message Box -->
+    <div id="message-box"></div>
+    
+    <!-- NEW: ARIA Live Region for forced focus announcements -->
+    <div id="aria-announcer" aria-live="assertive" role="status"></div>
+
+    <script>
+        // --- Crossword Definition (1-based coordinates R, C) ---
+        const CROSSWORD_DEF = [
+            // ACROSS words (sorted for clarity)
+            { number: 1, hint: "Part placed in hand print", answer: "PALM", direction: "Across", length: 4, startRow: 1, startCol: 2 },
+            { number: 5, hint: "Radio, TV, etc", answer: "MEDIA", direction: "Across", length: 5, startRow: 2, startCol: 1 },
+            { number: 6, hint: "French __ Soup", answer: "ONION", direction: "Across", length: 5, startRow: 3, startCol: 1 },
+            { number: 7, hint: "British biscuit", answer: "SCONE", direction: "Across", length: 5, startRow: 4, startCol: 1 },
+            { number: 8, hint: "Gas company with toy trucks", answer: "HESS", direction: "Across", length: 4, startRow: 5, startCol: 1 },
+            
+            // DOWN words
+            { number: 1, hint: "British coins", answer: "PENCE", direction: "Down", length: 5, startRow: 1, startCol: 2 },
+            { number: 2, hint: "\"Hasta la vista!\"", answer: "ADIOS", direction: "Down", length: 5, startRow: 1, startCol: 3 },
+            { number: 3, hint: "Members of a pride", answer: "LIONS", direction: "Down", length: 5, startRow: 1, startCol: 4 },
+            { number: 4, hint: "Hair in some 3-Down", answer: "MANE", direction: "Down", length: 4, startRow: 1, startCol: 5 },
+            { number: 5, hint: "Dance in a pit", answer: "MOSH", direction: "Down", length: 4, startRow: 2, startCol: 1 },
+        ];
+
+        const GRID_SIZE = 5;
+        const GRID_ELEMENT = document.getElementById('crossword-grid');
+        const ARIA_ANNOUNCER = document.getElementById('aria-announcer');
+
+        // Cells that are blocked (0-based indices)
+        const BLOCKED_CELLS = [[0, 0], [4, 4]];
+
+        // New Map for cell-to-clue lookup: Key: "R-C", Value: [{clue object}, ...]
+        const cellClueMap = new Map();
+
+        // --- Accessibility Setup ---
+        function setupAccessibilityMap() {
+            // Populate the map to quickly look up all clues associated with a given cell (r, c)
+            for (const clue of CROSSWORD_DEF) {
+                const startR = clue.startRow - 1;
+                const startC = clue.startCol - 1;
+
+                for (let i = 0; i < clue.length; i++) {
+                    let r = startR;
+                    let c = startC;
+
+                    if (clue.direction === 'Across') {
+                        c += i;
+                    } else { // Down
+                        r += i;
+                    }
+                    
+                    const key = `${r}-${c}`;
+                    if (!cellClueMap.has(key)) {
+                        cellClueMap.set(key, []);
+                    }
+                    // Add the clue object to the list for this cell
+                    cellClueMap.get(key).push(clue);
+                }
+            }
+        }
+
+        // Renamed to getAriaLabelText as it now calculates the string, 
+        // but doesn't necessarily set the aria-label on the element itself (it can if needed).
+        function getAriaLabelText(inputElement, r, c) {
+            const key = `${r}-${c}`;
+            const clues = cellClueMap.get(key);
+            
+            if (!clues || clues.length === 0) {
+                return ''; 
+            }
+
+            let labelParts = [];
+
+            // 1. Clue details (Number, Hint, Direction, Position, Length)
+            for (const clue of clues) {
+                let indexInWord;
+                if (clue.direction === 'Across') {
+                    // Position is C - startC
+                    indexInWord = c - (clue.startCol - 1);
+                } else {
+                    // Position is R - startR
+                    indexInWord = r - (clue.startRow - 1);
+                }
+                
+                const position = indexInWord + 1; // 1-based position
+
+                labelParts.push(
+                    `${clue.number} ${clue.direction} clue: "${clue.hint}". ` +
+                    `This is letter ${position} of ${clue.length}.`
+                );
+            }
+            
+            // 2. Current content status
+            const value = inputElement.value.toUpperCase();
+            // This part ensures the letter is announced if present
+            const contentStatus = value ? `The letter is currently ${value}.` : "The space is currently empty.";
+
+            // Combine all parts into a single label
+            const finalLabel = `Input at row ${r + 1}, column ${c + 1}. ${labelParts.join(' ')} ${contentStatus}`;
+            
+            return finalLabel;
+        }
+
+        // --- Helper Function for UI Messages ---
+        function showMessage(text, duration = 3000) {
+            const msgBox = document.getElementById('message-box');
+            const announcer = document.getElementById('aria-announcer');
+
+            // 1. Visually display the message
+            msgBox.textContent = text;
+            msgBox.classList.add('show');
+            
+            // 2. Announce the message using the Live Region
+            // Clear and set content to ensure announcement is triggered
+            announcer.textContent = '';
+            setTimeout(() => {
+                announcer.textContent = text;
+            }, 10); 
+
+            // 3. Hide the visual message after duration
+            setTimeout(() => {
+                msgBox.classList.remove('show');
+            }, duration);
+        }
+
+        // --- Grid Generation ---
+
+        // Map to store which clue numbers start at which cell (used only for display numbering)
+        const clueNumberMap = new Map(); // Key: "R-C", Value: [number]
+
+        function generateGrid() {
+            // 1. Determine clue number positions for display
+            for (const clue of CROSSWORD_DEF) {
+                const r = clue.startRow - 1; // 0-based
+                const c = clue.startCol - 1; // 0-based
+                const key = `${r}-${c}`;
+                
+                if (!clueNumberMap.has(key)) {
+                    clueNumberMap.set(key, []);
+                }
+                if (!clueNumberMap.get(key).includes(clue.number)) {
+                    clueNumberMap.get(key).push(clue.number);
+                }
+            }
+
+            // 2. Build the HTML Table
+            for (let r = 0; r < GRID_SIZE; r++) {
+                const row = GRID_ELEMENT.insertRow();
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const cell = row.insertCell();
+                    cell.classList.add('grid-cell');
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.setAttribute('role', 'gridcell');
+
+                    // Check if cell is blocked
+                    const isBlocked = BLOCKED_CELLS.some(([br, bc]) => br === r && bc === c);
+                    if (isBlocked) {
+                        cell.classList.add('blocked');
+                        cell.setAttribute('aria-label', `Blocked space at row ${r + 1}, column ${c + 1}.`);
+                        continue;
+                    }
+
+                    // Add clue number label
+                    const key = `${r}-${c}`;
+                    if (clueNumberMap.has(key)) {
+                        const clueNumberSpan = document.createElement('span');
+                        clueNumberSpan.classList.add('clue-number');
+                        clueNumberSpan.textContent = clueNumberMap.get(key)[0];
+                        // Add aria-hidden to the number span so the input's announcement is primary
+                        clueNumberSpan.setAttribute('aria-hidden', 'true'); 
+                        cell.appendChild(clueNumberSpan);
+                    }
+
+                    // Add input field
+                    const input = document.createElement('input');
+                    input.setAttribute('type', 'text');
+                    input.setAttribute('maxlength', '1');
+                    
+                    // Initial ARIA label (provides context when first encountered)
+                    input.setAttribute('aria-label', `Cell R${r+1} C${c+1}`);
+                    
+                    // --- ATTACH EVENT LISTENERS ---
+                    input.addEventListener('input', handleInput);
+                    input.addEventListener('keydown', handleKeyDown);
+                    input.addEventListener('focus', handleFocus); 
+                    // -----------------------------
+
+                    cell.appendChild(input);
+                }
+            }
+        }
+
+        // --- Clue List Generation ---
+        function generateClues() {
+            const acrossContainer = document.getElementById('across-clues');
+            const downContainer = document.getElementById('down-clues');
+            
+            const acrossClues = CROSSWORD_DEF.filter(c => c.direction === 'Across').sort((a, b) => a.number - b.number);
+            const downClues = CROSSWORD_DEF.filter(c => c.direction === 'Down').sort((a, b) => a.number - b.number);
+
+            const generateList = (clues, container) => {
+                const ul = document.createElement('ul');
+                ul.classList.add('list-none', 'space-y-2');
+                clues.forEach(clue => {
+                    const li = document.createElement('li');
+                    // Add an ID for potential future linking/highlighting
+                    li.setAttribute('id', `clue-${clue.number}-${clue.direction.toLowerCase()}`); 
+                    li.innerHTML = `<span class="font-mono font-bold text-green-700 mr-2">${clue.number}.</span> ${clue.hint}`;
+                    ul.appendChild(li);
+                });
+                container.appendChild(ul);
+            };
+
+            generateList(acrossClues, acrossContainer);
+            generateList(downClues, downContainer);
+        }
+        
+        // --- User Interaction Logic (Input and Navigation) ---
+
+        function getCellInput(r, c) {
+            const cell = document.querySelector(`.grid-cell[data-row='${r}'][data-col='${c}']`);
+            return cell ? cell.querySelector('input') : null;
+        }
+
+        function handleFocus(event) {
+            const input = event.target;
+            const r = parseInt(input.parentNode.dataset.row);
+            const c = parseInt(input.parentNode.dataset.col);
+            
+            // Generate the full descriptive text, including the current letter value
+            const announcement = getAriaLabelText(input, r, c);
+            
+            // Force announcement via the Live Region
+            ARIA_ANNOUNCER.textContent = ''; 
+            setTimeout(() => {
+                ARIA_ANNOUNCER.textContent = announcement;
+            }, 10);
+        }
+
+
+        function handleInput(event) {
+            const input = event.target;
+            // Force uppercase and take only the first character
+            input.value = input.value.toUpperCase().charAt(0); 
+
+            const r = parseInt(input.parentNode.dataset.row);
+            const c = parseInt(input.parentNode.dataset.col);
+
+            // Re-run the announcement on input completion
+            handleFocus(event);
+
+            // Auto-move focus to the next cell
+            if (input.value) {
+                
+                // Try moving right (default direction for text input flow)
+                let nextInput = getCellInput(r, c + 1);
+                if (nextInput && !nextInput.parentNode.classList.contains('blocked')) {
+                    nextInput.focus();
+                } else {
+                    // Try moving down if right is blocked or end of row (simpler default fallthrough)
+                    nextInput = getCellInput(r + 1, c);
+                    if (nextInput && !nextInput.parentNode.classList.contains('blocked')) {
+                        nextInput.focus();
+                    }
+                }
+            }
+        }
+
+        function handleKeyDown(event) {
+            const input = event.target;
+            const r = parseInt(input.parentNode.dataset.row);
+            const c = parseInt(input.parentNode.dataset.col);
+            let nextInput = null;
+
+            switch (event.key) {
+                case 'ArrowUp':
+                    nextInput = getCellInput(r - 1, c);
+                    break;
+                case 'ArrowDown':
+                    nextInput = getCellInput(r + 1, c);
+                    break;
+                case 'ArrowLeft':
+                    nextInput = getCellInput(r, c - 1);
+                    break;
+                case 'ArrowRight':
+                    nextInput = getCellInput(r, c + 1);
+                    break;
+                case 'Backspace':
+                    if (input.value === '') {
+                        // Move focus to the previous cell
+                        nextInput = getCellInput(r, c - 1);
+                        if (nextInput) {
+                            nextInput.focus();
+                            event.preventDefault(); // Stop default backspace action
+                        }
+                    }
+                    return; // Don't prevent default action if value exists
+            }
+
+            if (nextInput && !nextInput.parentNode.classList.contains('blocked')) {
+                nextInput.focus();
+                event.preventDefault(); // Stop default movement
+            }
+        }
+        
+        // --- Game Control Logic ---
+
+        function checkPuzzle() {
+            let totalCells = 0;
+            let isComplete = true;
+            
+            // Clear all previous highlights
+            document.querySelectorAll('.grid-cell input').forEach(input => {
+                input.parentNode.classList.remove('bg-red-200', 'bg-green-200');
+            });
+
+            // Map to track unique correct cells
+            const uniqueCells = new Set();
+            const uniqueCorrectCells = new Set();
+
+            CROSSWORD_DEF.forEach(clue => {
+                const startR = clue.startRow - 1;
+                const startC = clue.startCol - 1;
+
+                for (let i = 0; i < clue.length; i++) {
+                    let r = startR;
+                    let c = startC;
+                    if (clue.direction === 'Across') c += i;
+                    else r += i;
+                    
+                    const key = `${r}-${c}`;
+                    if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE) {
+                        uniqueCells.add(key);
+                        const cellInput = getCellInput(r, c);
+                        
+                        if (cellInput) {
+                            const userLetter = cellInput.value.toUpperCase();
+                            const correctLetter = clue.answer[i];
+
+                            if (userLetter === '') {
+                                isComplete = false;
+                            } else if (userLetter === correctLetter) {
+                                // If the letter is correct for ANY clue passing through, mark it as correct
+                                uniqueCorrectCells.add(key);
+                            }
+                        }
+                    }
+                }
+            });
+            
+            totalCells = uniqueCells.size;
+            const finalCorrectCount = uniqueCorrectCells.size;
+
+            // Apply coloring based on final unique check
+            uniqueCells.forEach(key => {
+                const [r, c] = key.split('-').map(Number);
+                const cellInput = getCellInput(r, c);
+                if (cellInput) {
+                    if (uniqueCorrectCells.has(key)) {
+                        cellInput.parentNode.classList.add('bg-green-200');
+                    } else if (cellInput.value !== '') {
+                        cellInput.parentNode.classList.add('bg-red-200');
+                    }
+                }
+            });
+            
+            if (finalCorrectCount === totalCells && isComplete) {
+                showMessage("🎉 Congratulations! You solved the entire puzzle! 🎉", 5000);
+            } else if (!isComplete) {
+                showMessage(`Keep going! You have ${finalCorrectCount} out of ${totalCells} letters correct so far.`, 3000);
+            } else {
+                 showMessage(`Nice try! You have ${finalCorrectCount} out of ${totalCells} letters correct. Review the highlighted red cells.`, 4000);
+            }
+        }
+
+        function revealPuzzle() {
+            for (const clue of CROSSWORD_DEF) {
+                const startR = clue.startRow - 1;
+                const startC = clue.startCol - 1;
+
+                for (let i = 0; i < clue.length; i++) {
+                    let r = startR;
+                    let c = startC;
+                    
+                    if (clue.direction === 'Across') {
+                        c += i;
+                    } else { // Down
+                        r += i;
+                    }
+                    
+                    const cellInput = getCellInput(r, c);
+                    if (cellInput) {
+                        cellInput.value = clue.answer[i];
+                        // CHANGE: Use readOnly instead of disabled so the cell remains focusable and announces its content
+                        cellInput.readOnly = true; 
+                        cellInput.parentNode.classList.remove('bg-red-200', 'bg-green-200'); // Remove feedback color
+                        cellInput.parentNode.classList.add('bg-yellow-100'); // Add a revealed color
+                    }
+                }
+            }
+            showMessage("Solution revealed! All cells are now filled and read-only.", 4000);
+        }
+
+        // --- Initialization ---
+        window.onload = function() {
+            setupAccessibilityMap(); 
+            generateGrid();
+            generateClues();
+            
+            // Set focus to the first input cell
+            const firstCell = getCellInput(0, 1);
+            if (firstCell) {
+                firstCell.focus();
+            }
+        };
+
+    </script>
+</body>
+</html>
